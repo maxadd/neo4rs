@@ -1,10 +1,9 @@
 pub use crate::errors::*;
 
-const DEFAULT_DATABASE: &str = "neo4j";
 const DEFAULT_FETCH_SIZE: usize = 200;
 const DEFAULT_MAX_CONNECTIONS: usize = 16;
 
-/// The configuration used to connect to the database, see [`crate::Graph::connect`].
+/// The configuration used to connect to the database, see [`crate::Graph::connect`]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub(crate) uri: String,
@@ -15,91 +14,87 @@ pub struct Config {
     pub(crate) fetch_size: usize,
 }
 
-/// A builder to override default configurations and build the [`Config`].
+/// A builder to override default configurations and build the [`Config`]
 pub struct ConfigBuilder {
     uri: Option<String>,
     user: Option<String>,
     password: Option<String>,
-    db: String,
-    fetch_size: usize,
-    max_connections: usize,
+    db: Option<String>,
+    fetch_size: Option<usize>,
+    max_connections: Option<usize>,
 }
 
 impl ConfigBuilder {
-    /// Creates a new `ConfigBuilder` with default values.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// The uri of the Neo4j server, e.g. "127.0.0.1:7687".
-    pub fn uri(mut self, uri: impl Into<String>) -> Self {
-        self.uri = Some(uri.into());
+    ///the uri of the neo4j server
+    pub fn uri(mut self, uri: &str) -> Self {
+        self.uri = Some(uri.to_owned());
         self
     }
 
-    /// The username for authenticating with the Neo4j server.
-    pub fn user(mut self, user: impl Into<String>) -> Self {
-        self.user = Some(user.into());
+    ///username for authentication
+    pub fn user(mut self, user: &str) -> Self {
+        self.user = Some(user.to_owned());
         self
     }
 
-    /// The password for authenticating with the Neo4j server.
-    pub fn password(mut self, password: impl Into<String>) -> Self {
-        self.password = Some(password.into());
+    ///password for authentication
+    pub fn password(mut self, password: &str) -> Self {
+        self.password = Some(password.to_owned());
         self
     }
 
-    /// The name of the database to connect to.
-    ///
-    /// Defaults to "neo4j" if not set.
-    pub fn db(mut self, db: impl Into<String>) -> Self {
-        self.db = db.into();
+    ///the name of the database, defaults to "neo4j" if not configured.
+    pub fn db(mut self, db: &str) -> Self {
+        self.db = Some(db.to_owned());
         self
     }
 
-    /// `fetch_size` indicates the number of rows to fetch from server in one request.
-    /// It is recommended to use a large `fetch_size` if you are working with large data sets.
-    ///
-    /// Defaults to 200 if not set.
+    ///fetch_size indicates the number of rows to fetch from server in one request, it is
+    ///recommended to use a large fetch_size if you are working with large data sets.
+    ///default fetch_size is 200
     pub fn fetch_size(mut self, fetch_size: usize) -> Self {
-        self.fetch_size = fetch_size;
+        self.fetch_size = Some(fetch_size);
         self
     }
 
-    /// The maximum number of connections in the connection pool.
-    ///
-    /// Defaults to 16 if not set.
+    ///maximum number of connections in the connection pool
     pub fn max_connections(mut self, max_connections: usize) -> Self {
-        self.max_connections = max_connections;
+        self.max_connections = Some(max_connections);
         self
     }
 
     pub fn build(self) -> Result<Config> {
-        if let (Some(uri), Some(user), Some(password)) = (self.uri, self.user, self.password) {
-            Ok(Config {
-                uri,
-                user,
-                password,
-                fetch_size: self.fetch_size,
-                max_connections: self.max_connections,
-                db: self.db,
-            })
-        } else {
+        if self.uri.is_none()
+            || self.user.is_none()
+            || self.password.is_none()
+            || self.fetch_size.is_none()
+            || self.max_connections.is_none()
+            || self.db.is_none()
+        {
             Err(Error::InvalidConfig)
+        } else {
+            //The config attributes are validated before unwrapping
+            Ok(Config {
+                uri: self.uri.unwrap(),
+                user: self.user.unwrap(),
+                password: self.password.unwrap(),
+                fetch_size: self.fetch_size.unwrap(),
+                max_connections: self.max_connections.unwrap(),
+                db: self.db.unwrap(),
+            })
         }
     }
 }
 
-impl Default for ConfigBuilder {
-    fn default() -> Self {
-        ConfigBuilder {
-            uri: None,
-            user: None,
-            password: None,
-            db: DEFAULT_DATABASE.into(),
-            max_connections: DEFAULT_MAX_CONNECTIONS,
-            fetch_size: DEFAULT_FETCH_SIZE,
-        }
+/// Creates a config builder with reasonable default values wherever appropriate.
+pub fn config() -> ConfigBuilder {
+    ConfigBuilder {
+        uri: None,
+        user: None,
+        password: None,
+        db: Some("".to_owned()),
+        max_connections: Some(DEFAULT_MAX_CONNECTIONS),
+        fetch_size: Some(DEFAULT_FETCH_SIZE),
     }
 }
 
@@ -107,9 +102,9 @@ impl Default for ConfigBuilder {
 mod tests {
     use super::*;
 
-    #[test]
-    fn should_build_config() {
-        let config = ConfigBuilder::default()
+    #[tokio::test]
+    async fn should_build_config() {
+        let config = config()
             .uri("127.0.0.1:7687")
             .user("some_user")
             .password("some_password")
@@ -126,9 +121,9 @@ mod tests {
         assert_eq!(config.max_connections, 5);
     }
 
-    #[test]
-    fn should_build_with_defaults() {
-        let config = ConfigBuilder::default()
+    #[tokio::test]
+    async fn should_build_with_defaults() {
+        let config = config()
             .uri("127.0.0.1:7687")
             .user("some_user")
             .password("some_password")
@@ -137,26 +132,26 @@ mod tests {
         assert_eq!(config.uri, "127.0.0.1:7687");
         assert_eq!(config.user, "some_user");
         assert_eq!(config.password, "some_password");
-        assert_eq!(config.db, "neo4j");
+        assert_eq!(config.db, "");
         assert_eq!(config.fetch_size, 200);
         assert_eq!(config.max_connections, 16);
     }
 
-    #[test]
-    fn should_reject_invalid_config() {
-        assert!(ConfigBuilder::default()
+    #[tokio::test]
+    async fn should_reject_invalid_config() {
+        assert!(config()
             .user("some_user")
             .password("some_password")
             .build()
             .is_err());
 
-        assert!(ConfigBuilder::default()
+        assert!(config()
             .uri("127.0.0.1:7687")
             .password("some_password")
             .build()
             .is_err());
 
-        assert!(ConfigBuilder::default()
+        assert!(config()
             .uri("127.0.0.1:7687")
             .user("some_user")
             .build()

@@ -132,6 +132,10 @@ impl Node {
         self.inner.id.value
     }
 
+    pub fn properties(&self) -> &BoltMap {
+        &self.inner.properties
+    }
+
     /// various labels attached to this node
     pub fn labels(&self) -> Vec<String> {
         self.inner.labels.iter().map(|l| l.to_string()).collect()
